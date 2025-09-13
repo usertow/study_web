@@ -1,0 +1,128 @@
+diff -upNr BUILD/src/plugins/qpa/integration.cpp BUILDnew/src/plugins/qpa/integration.cpp
+--- BUILD/src/plugins/qpa/integration.cpp	2025-07-15 02:44:48.000000000 +0000
++++ BUILDnew/src/plugins/qpa/integration.cpp	2025-09-13 16:57:58.405219802 +0000
+@@ -28,6 +28,8 @@
+ #include <qpa/qplatformwindow.h>
+ #include <qpa/qwindowsysteminterface.h>
+ 
++#include <QDesktopServices> // 确保已包含QDesktopServices头文件
++
+ #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+ #include <QtEventDispatcherSupport/private/qunixeventdispatcher_qpa_p.h>
+ #include <QtFontDatabaseSupport/private/qgenericunixfontdatabase_p.h>
+@@ -44,23 +46,41 @@ namespace KWin
+ 
+ namespace QPA
+ {
++
+ class DDEWaylandTheme: public QGenericUnixTheme {
+ public:
+-    QVariant themeHint(ThemeHint hint) const {
++    QVariant themeHint(ThemeHint hint) const override { // 添加override
+         if (hint == QPlatformTheme::SystemIconThemeName) {
+             return "bloom";
+         }
+-
+         return QGenericUnixTheme::themeHint(hint);
+     }
+ };
+ 
++// 实现自定义服务
++// 添加DDEServices方法实现（仅在Qt6中编译）
++#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
++bool DDEServices::openUrl(const QUrl &url)
++{
++    return QDesktopServices::openUrl(url);
++}
++
++bool DDEServices::openDocument(const QUrl &url)
++{
++    return QDesktopServices::openUrl(url);
++}
++#endif
++
+ Integration::Integration()
+     : QObject()
+     , QPlatformIntegration()
+     , m_fontDb(new QGenericUnixFontDatabase())
+     , m_nativeInterface(new QPlatformNativeInterface())
++#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+     , m_services(new QGenericUnixServices())
++#else
++    , m_services(new DDEServices())
++#endif
+ {
+ }
+ 
+@@ -246,8 +266,12 @@ QPlatformNativeInterface *Integration::n
+ 
+ QPlatformServices *Integration::services() const
+ {
++#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+     return m_services.get();
++#else
++    return m_services.get();
++#endif
+ }
+ 
+ }
+-}
++}
+\ 文件末尾没有换行符
+diff -upNr BUILD/src/plugins/qpa/integration.h BUILDnew/src/plugins/qpa/integration.h
+--- BUILD/src/plugins/qpa/integration.h	2025-07-15 02:44:48.000000000 +0000
++++ BUILDnew/src/plugins/qpa/integration.h	2025-09-13 16:59:25.169227876 +0000
+@@ -12,15 +12,19 @@
+ #include <epoxy/egl.h>
+ 
+ #include <QObject>
++// 移除废弃的头文件包含
+ #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+ #include <QtServiceSupport/private/qgenericunixservices_p.h>
+-#else
+-#include <QtGui/private/qgenericunixservices_p.h>
+ #endif
+ #include <qpa/qplatformintegration.h>
+ 
+ #include <memory>
+ 
++// 修改为正确的QPlatformServices头文件包含
++#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
++#include <qpa/qplatformservices.h>
++#endif
++
+ namespace KWin
+ {
+ 
+@@ -31,6 +35,16 @@ namespace QPA
+ 
+ class Screen;
+ 
++// 自定义QPlatformServices实现
++#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
++class DDEServices : public QPlatformServices
++{
++public:
++    bool openUrl(const QUrl &url) override;
++    bool openDocument(const QUrl &url) override;
++};
++#endif
++
+ class Integration : public QObject, public QPlatformIntegration
+ {
+     Q_OBJECT
+@@ -63,8 +77,12 @@ private:
+     std::unique_ptr<QPlatformNativeInterface> m_nativeInterface;
+     QPlatformScreen *m_dummyScreen = nullptr;
+     QHash<Output *, Screen *> m_screens;
++#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+     std::unique_ptr<QGenericUnixServices> m_services;
++#else
++    std::unique_ptr<DDEServices> m_services;
++#endif
+ };
+ 
+ }
+-}
++}
+
